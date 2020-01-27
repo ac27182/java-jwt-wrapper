@@ -14,7 +14,8 @@ abstract class PrivateClaimType[T] {
   def encode(builder: Builder)(name: String, t: T): Builder
   final def decode(claims: jMap[String, Claim])(name: String): T = {
     val claim = claims.get(name)
-    if ((claim eq null) || claim.isNull) decodeNullClaim(name) else decodeClaim(claim)
+    if ((claim eq null) || claim.isNull) decodeNullClaim(name)
+    else decodeClaim(claim)
   }
   def decodeClaim(claim: Claim): T
 
@@ -24,8 +25,9 @@ abstract class PrivateClaimType[T] {
 
 trait DefaultPrivateClaimTypes {
   implicit object BooleanType extends PrivateClaimType[Boolean] {
-    override def encode(builder: Builder)(name: String, t: Boolean) = builder.withClaim(name, t)
-    override def decodeClaim(claim: Claim)                          = claim.asBoolean()
+    override def encode(builder: Builder)(name: String, t: Boolean) =
+      builder.withClaim(name, t)
+    override def decodeClaim(claim: Claim) = claim.asBoolean()
   }
   implicit object IntType extends PrivateClaimType[Int] {
     override def encode(builder: Builder)(name: String, t: Int) =
@@ -43,12 +45,14 @@ trait DefaultPrivateClaimTypes {
     override def decodeClaim(claim: Claim) = claim.asDouble()
   }
   implicit object StringType extends PrivateClaimType[String] {
-    override def encode(builder: Builder)(name: String, t: String) = builder.withClaim(name, t)
-    override def decodeClaim(claim: Claim)                         = claim.asString()
+    override def encode(builder: Builder)(name: String, t: String) =
+      builder.withClaim(name, t)
+    override def decodeClaim(claim: Claim) = claim.asString()
   }
   implicit object DateType extends PrivateClaimType[Date] {
-    override def encode(builder: Builder)(name: String, t: Date) = builder.withClaim(name, t)
-    override def decodeClaim(claim: Claim)                       = claim.asDate()
+    override def encode(builder: Builder)(name: String, t: Date) =
+      builder.withClaim(name, t)
+    override def decodeClaim(claim: Claim) = claim.asDate()
   }
   implicit object StringArrayType extends PrivateClaimType[Array[String]] {
     override def encode(builder: Builder)(name: String, t: Array[String]) =
@@ -68,45 +72,59 @@ trait DefaultPrivateClaimTypes {
       claim.asArray(classOf[java.lang.Long]).map(Long.unbox(_))
   }
 
-  implicit def OptionType[T](implicit base: PrivateClaimType[T]): PrivateClaimType[Option[T]] =
+  implicit def OptionType[T](
+      implicit base: PrivateClaimType[T]
+  ): PrivateClaimType[Option[T]] =
     new PrivateClaimType[Option[T]] {
       override def encode(builder: Builder)(name: String, maybeT: Option[T]) =
         maybeT.fold(builder)(t => base.encode(builder)(name, t))
-      override def decodeClaim(claim: Claim)     = Some(base.decodeClaim(claim))
+      override def decodeClaim(claim: Claim) = Some(base.decodeClaim(claim))
       override def decodeNullClaim(name: String) = None
     }
 
   implicit def TraversableType[T, TT[_] <: TraversableOnce[_ <: T]](
-                                                                     implicit classTag: ClassTag[T],
-                                                                     canBuildFrom: CanBuildFrom[Nothing, T, TT[T]],
-                                                                     baseArray: PrivateClaimType[Array[T]]): PrivateClaimType[TT[T]] =
+      implicit classTag: ClassTag[T],
+      canBuildFrom: CanBuildFrom[Nothing, T, TT[T]],
+      baseArray: PrivateClaimType[Array[T]]
+  ): PrivateClaimType[TT[T]] =
     new PrivateClaimType[TT[T]] {
       override def encode(builder: Builder)(name: String, ts: TT[T]) =
         baseArray.encode(builder)(name, ts.toArray[T])
-      override def decodeClaim(claim: Claim) = baseArray.decodeClaim(claim).to[TT]
+      override def decodeClaim(claim: Claim) =
+        baseArray.decodeClaim(claim).to[TT]
     }
 }
 
 object PrivateClaimType extends DefaultPrivateClaimTypes {
 
-  final class Mapped[T, U](val map: T => U, val comap: U => T, base: PrivateClaimType[U])
-    extends PrivateClaimType[T] {
-    override def encode(builder: Builder)(name: String, t: T) = base.encode(builder)(name, map(t))
-    override def decodeClaim(claim: Claim)                    = comap(base.decodeClaim(claim))
-    override def decodeNullClaim(name: String)                = comap(base.decodeNullClaim(name))
+  final class Mapped[T, U](
+      val map: T => U,
+      val comap: U => T,
+      base: PrivateClaimType[U]
+  ) extends PrivateClaimType[T] {
+    override def encode(builder: Builder)(name: String, t: T) =
+      base.encode(builder)(name, map(t))
+    override def decodeClaim(claim: Claim) = comap(base.decodeClaim(claim))
+    override def decodeNullClaim(name: String) =
+      comap(base.decodeNullClaim(name))
   }
 
   object Mapped {
 
-    def apply[T, U](tu: T => U, ut: U => T)(implicit base: PrivateClaimType[U]): Mapped[T, U] =
+    def apply[T, U](tu: T => U, ut: U => T)(
+        implicit base: PrivateClaimType[U]
+    ): Mapped[T, U] =
       new Mapped(tu, ut, base)
   }
 
-  implicit def UuidType: Mapped[UUID, String] = Mapped(_.toString, UUID.fromString(_))
-  implicit def MappedArrayType[T, U](implicit mapped: Mapped[T, U],
-                                     baseArray: PrivateClaimType[Array[U]],
-                                     clsT: ClassTag[T],
-                                     clsU: ClassTag[U]): Mapped[Array[T], Array[U]] =
+  implicit def UuidType: Mapped[UUID, String] =
+    Mapped(_.toString, UUID.fromString(_))
+  implicit def MappedArrayType[T, U](
+      implicit mapped: Mapped[T, U],
+      baseArray: PrivateClaimType[Array[U]],
+      clsT: ClassTag[T],
+      clsU: ClassTag[U]
+  ): Mapped[Array[T], Array[U]] =
     Mapped(_.map(mapped.map).toArray, _.map(mapped.comap).toArray)
 
 }

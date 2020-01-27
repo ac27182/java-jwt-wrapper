@@ -1,3 +1,7 @@
 *.log
 .idea/
 target/
+.bloop/
+.metals/
+project/project/
+metals.sbt
